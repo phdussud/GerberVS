@@ -147,14 +147,17 @@ namespace IsoCnc
                 machine.insertCode(String.Format(tool_change_format, 2, options.tool_diameter, iso_lift, tool_change_height, iso_spindle_speed));
             }
             current_tool_diameter = options.tool_diameter;
-            for (int i = 0; i < shape.NumGeometries; i++) 
+            var ring_list = new List<Coordinate[]>();
+            for (int i = 0; i < shape.NumGeometries; i++)
             {
                 if (shape.GetGeometryN(i) is Polygon poly)
                 {
-                    write_ring(poly.ExteriorRing.Coordinates, ccw);
+                    //write_ring(poly.ExteriorRing.Coordinates, ccw);
+                    ring_list.Add(poly.ExteriorRing.Coordinates);
                     foreach (var r in poly.InteriorRings)
                     {
-                        write_ring(r.Coordinates, ccw);
+                        //write_ring(r.Coordinates, ccw);
+                        ring_list.Add(r.Coordinates);
                     }
                 }
                 else
@@ -162,8 +165,48 @@ namespace IsoCnc
                     Debug.Assert(false);
                 }
             }
+            //sort rings to minimize travel
+            sort_coordinates(ring_list);
+            foreach (var ring in ring_list)
+            {
+                write_ring(ring, ccw);
+            }
             if (options.last_tool && options.last_path)
                 machine.insertCode(file_end_code);
+        }
+        void sort_coordinates (List<Coordinate[]> ring_list)
+        {
+            double x0 = 0;
+            double y0 = 0;
+            //sort according to pythagorean distance from each other.
+            //start from 0,0
+            for (int i = -1; i<ring_list.Count - 1; i++)
+            {
+                if (i >= 0)
+                {
+                    x0 = ring_list[i][0].X;
+                    y0 = ring_list[i][0].Y;
+                }
+                int index_min = i + 1;
+                double d_min = double.MaxValue;
+                for (int j = i + 1; j<ring_list.Count; j++)
+                {
+                    double x1 = ring_list[j][0].X;
+                    double y1 = ring_list[j][0].Y;
+                    double d = Math.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+                    if (d<d_min)
+                    {
+                        d_min = d;
+                        index_min = j;
+                    }
+                }
+                if (index_min != i + 1)
+                {
+                var tmp = ring_list[i + 1];
+                ring_list[i + 1] = ring_list[index_min];
+                ring_list[index_min] = tmp;
+                }
+            }
         }
     }
     internal class CncDrillWriter
@@ -187,7 +230,7 @@ namespace IsoCnc
         double tool_change_height = 40;
         double drill_spindle_speed = 26000;
         double slot_drill_overlap = 0.25;
-        string tool_change_code = "M5\nG0 Z{tool_change_height}\nG0 X0 Y0\nM6 T{tool_number} ({tool_diameter} mm)\nM0\nM03 S{spindle_speed}\nG0 Z{tool_lift}";
+        string tool_change_code = "M5\nG0 Z{tool_change_height}\nG0 X0 Y0\nM6 T{tool_number} ({tool_diameter} mm)\nM03 S{spindle_speed}\nG0 Z{tool_lift}";
         Dictionary<string, int> tool_change_map = new Dictionary<string, int>()
         {
             {"tool_number", 0 },
@@ -279,6 +322,7 @@ namespace IsoCnc
                 int apertureIndex = apertureList[i];
                 var currAperture = newImage.ApertureArray()[apertureIndex];
                 double diameter_mm = currAperture.Parameters()[0] * (currAperture.Unit == GerberUnit.Inch ? 25.4 : 1.0);
+                var net_list = new List<GerberNet>();
 
                 // Write tool change.
                 machine.insertCode(String.Format(tool_change_format, apertureIndex, diameter_mm / (metric_mode ? 1.0 : 25.4), drill_lift, tool_change_height, drill_spindle_speed));
@@ -294,46 +338,13 @@ namespace IsoCnc
                         currentNet.StartX = -currentNet.StartX;
                         currentNet.EndX = -currentNet.EndX;
                     }
-                    switch (currentNet.ApertureState)
+                    net_list.Add(currentNet);
+                }
+                {   // Optimize the order of the holes.
+                    sort_net_list(net_list);
+                    foreach (var net in net_list)
                     {
-                        case GerberApertureState.Flash:
-                            machine.drillMove(currentNet.StartX, currentNet.StartY, drill_depth / unit_factor, drill_lift /unit_factor, drill_feed_rate /unit_factor, drill_pause);
-                            break;
-
-                        case GerberApertureState.On:    // Cut slot.
-                            if (currentNet.Interpolation == GerberInterpolation.Linear)
-                            {
-                                if (drill_slots)
-                                {
-                                    double slot_drill_length = (1 - slot_drill_overlap) * diameter_mm / unit_factor;
-                                    LineSegment slot = new LineSegment(currentNet.StartX, currentNet.StartY,
-                                                                       currentNet.EndX, currentNet.EndY);
-                                    var s_length = slot.Length;
-                                    var n_drills_min = Math.Round(s_length / slot_drill_length);
-                                    var n_drills = n_drills_min;
-                                    if (n_drills_min > 0)
-                                    {
-                                        slot_drill_length = s_length / n_drills_min;
-                                        n_drills = s_length / slot_drill_length;
-                                    }
-                                    for (int d = 0; d <= n_drills; d++)
-                                    {
-                                        Coordinate a = slot.PointAlong(d * slot_drill_length / s_length);
-                                        machine.drillMove(a.X, a.Y, drill_depth / unit_factor, drill_lift / unit_factor, drill_feed_rate / unit_factor, drill_pause);
-                                    }
-                                }
-                                else
-                                {
-                                    machine.rapidMove(currentNet.StartX, currentNet.StartY);
-                                    machine.move(z_abs: drill_depth / unit_factor, feed_rate: drill_feed_rate / unit_factor);
-                                    machine.move(currentNet.EndX, currentNet.EndY);
-                                    machine.rapidMove(z_abs: drill_lift / unit_factor);
-                                }
-                            }
-                            break;
-
-                        default:
-                            break;
+                        drill_code(net, diameter_mm);
                     }
                 }
             }
@@ -341,5 +352,83 @@ namespace IsoCnc
             // Write footer.
             machine.insertCode(file_end_code);
         }
+        void sort_net_list(List<GerberNet> net_list)
+        {
+            double x0 = 0;
+            double y0 = 0;
+            //sort according to pythagorean distance from each other.
+            //start from 0,0
+            for (int i = -1; i < net_list.Count - 1; i++)
+            {
+                if (i >= 0)
+                {
+                    x0 = net_list[i].StartX;
+                    y0 = net_list[i].StartY;
+                }
+                int index_min = i + 1;
+                double d_min = double.MaxValue;
+                for (int j = i + 1; j < net_list.Count; j++)
+                {
+                    double x1 = net_list[j].StartX;
+                    double y1 = net_list[j].StartY;
+                    double d = Math.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+                    if (d < d_min)
+                    {
+                        d_min = d;
+                        index_min = j;
+                    }
+                }
+                if (index_min != i + 1)
+                {
+                    var tmp = net_list[i + 1];
+                    net_list[i + 1] = net_list[index_min];
+                    net_list[index_min] = tmp;
+                }
+            }
+        }
+        void drill_code(GerberNet currentNet, double diameter_mm)
+        {
+            switch (currentNet.ApertureState)
+            {
+                case GerberApertureState.Flash:
+                    machine.drillMove(currentNet.StartX, currentNet.StartY, drill_depth / unit_factor, drill_lift / unit_factor, drill_feed_rate / unit_factor, drill_pause);
+                    break;
+
+                case GerberApertureState.On:    // Cut slot.
+                    if (currentNet.Interpolation == GerberInterpolation.Linear)
+                    {
+                        if (drill_slots)
+                        {
+                            double slot_drill_length = (1 - slot_drill_overlap) * diameter_mm / unit_factor;
+                            LineSegment slot = new LineSegment(currentNet.StartX, currentNet.StartY,
+                                                                currentNet.EndX, currentNet.EndY);
+                            var s_length = slot.Length;
+                            var n_drills_min = Math.Round(s_length / slot_drill_length);
+                            var n_drills = n_drills_min;
+                            if (n_drills_min > 0)
+                            {
+                                slot_drill_length = s_length / n_drills_min;
+                                n_drills = s_length / slot_drill_length;
+                            }
+                            for (int d = 0; d <= n_drills; d++)
+                            {
+                                Coordinate a = slot.PointAlong(d * slot_drill_length / s_length);
+                                machine.drillMove(a.X, a.Y, drill_depth / unit_factor, drill_lift / unit_factor, drill_feed_rate / unit_factor, drill_pause);
+                            }
+                        }
+                        else
+                        {
+                            machine.rapidMove(currentNet.StartX, currentNet.StartY);
+                            machine.move(z_abs: drill_depth / unit_factor, feed_rate: drill_feed_rate / unit_factor);
+                            machine.move(currentNet.EndX, currentNet.EndY);
+                            machine.rapidMove(z_abs: drill_lift / unit_factor);
+                        }
+                    }
+                    break;
+
+                default:
+                    break;
+            }
+        }       
     }
 }

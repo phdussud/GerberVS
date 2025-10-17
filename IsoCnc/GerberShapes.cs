@@ -46,7 +46,7 @@ using System.IO;
 using NetTopologySuite.Operation.Overlay;
 using System.Linq.Expressions;
 using NetTopologySuite.Algorithm;
-using System.Runtime.DesignerServices;
+//using System.Runtime.DesignerServices;
 
 namespace IsoCnc
 {

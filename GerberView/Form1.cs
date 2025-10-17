@@ -859,8 +859,8 @@ namespace GerberView
             saveProjectToolStripMenuItem.Enabled = !project.IsEmpty && project.Path != String.Empty;
             saveToolStripButton.Enabled = !project.IsEmpty && project.Path != String.Empty;
             saveProjectAsToolStripMenuItem.Enabled = !project.IsEmpty;
-            newProjectToolStripMenuItem.Enabled = !project.IsEmpty;
-            newToolStripButton.Enabled = !project.IsEmpty;
+            newProjectToolStripMenuItem.Enabled = project.IsEmpty;
+            newToolStripButton.Enabled = project.IsEmpty;
             printPreviewToolStripMenuItem.Enabled = !project.IsEmpty;
             printToolStripMenuItem.Enabled = !project.IsEmpty;
             exportImageToolStripMenuItem.Enabled = !project.IsEmpty;
@@ -1013,23 +1013,26 @@ namespace GerberView
 
         private void TranslateImage()
         {
-            renderInfo.DisplayWidth = pcbImagePanel.Width / displayDpiX;
-            renderInfo.DisplayHeight = pcbImagePanel.Height / displayDpiY;
+            if (renderInfo != null)
+            {
+                renderInfo.DisplayWidth = pcbImagePanel.Width / displayDpiX;
+                renderInfo.DisplayHeight = pcbImagePanel.Height / displayDpiY;
 
-            if (translateMode == ImageTranslateMode.TranslateToCenter)
-                gerberLib.TranslateToCenter(project, renderInfo);
+                if (translateMode == ImageTranslateMode.TranslateToCenter)
+                    gerberLib.TranslateToCenter(project, renderInfo);
 
-            else
-                gerberLib.TranslateToFitDisplay(project, renderInfo);
+                else
+                    gerberLib.TranslateToFitDisplay(project, renderInfo);
 
-            Size imageSize = new Size((int)(renderInfo.ImageWidth * displayDpiX),
-                                      (int)(renderInfo.ImageHeight * displayDpiY));   // Image size in pixels.
+                Size imageSize = new Size((int)(renderInfo.ImageWidth * displayDpiX),
+                                          (int)(renderInfo.ImageHeight * displayDpiY));   // Image size in pixels.
 
-            pcbImagePanel.AutoScrollMinSize = imageSize;
-            float scrollValueX = pcbImagePanel.AutoScrollPosition.X / displayDpiX;
-            float scrollValueY = pcbImagePanel.AutoScrollPosition.Y / displayDpiY;
-            renderInfo.LowerLeftX += scrollValueX;
-            renderInfo.LowerLeftY -= scrollValueY;
+                pcbImagePanel.AutoScrollMinSize = imageSize;
+                float scrollValueX = pcbImagePanel.AutoScrollPosition.X / displayDpiX;
+                float scrollValueY = pcbImagePanel.AutoScrollPosition.Y / displayDpiY;
+                renderInfo.LowerLeftX += scrollValueX;
+                renderInfo.LowerLeftY -= scrollValueY;
+            }
         }
 
         private void ZoomIn()

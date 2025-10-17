@@ -13,5 +13,6 @@
     <ErrorReportUrlHistory />
     <FallbackCulture>en-US</FallbackCulture>
     <VerifyUploadedFiles>false</VerifyUploadedFiles>
+    <_LastSelectedProfileId>C:\Users\Patrick\Documents\visual studio projects\GerberVS\IsoCnc\Properties\PublishProfiles\FolderProfile.pubxml</_LastSelectedProfileId>
   </PropertyGroup>
 </Project>

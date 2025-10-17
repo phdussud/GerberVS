@@ -51,7 +51,7 @@ namespace IsoCnc
 
             if (args.Length < 3)
             {
-                Console.WriteLine("Usage: isocnc <gerber input file> <nc output file> <options config file> [mirrorX = false]");
+                Console.WriteLine("Usage: isocnc <gerber input file> <nc output file> <options config file> [mirrorX = false or true]");
                 System.Environment.Exit(-1);
             }
             var fullPathName = args[0];
@@ -61,6 +61,11 @@ namespace IsoCnc
             {
                 if (Boolean.TryParse(args[3], out bool res))
                     mirrorX = res;
+                else
+                {
+                    Console.WriteLine("Usage: isocnc <gerber input file> <nc output file> <options config file> [mirrorX = false or true]");
+                    System.Environment.Exit(-1);
+                }
             }
             string borderPathName = null;
             if (args.Length > 4)
@@ -68,6 +73,11 @@ namespace IsoCnc
                 borderPathName = args[4]; //this is experimental and not documented.
             }
             var config = Configuration.ReadConfig(configPath);
+            if(config == null)
+            {
+                Console.WriteLine("config file: {0} is missing", configPath);
+                return;
+            }
 
             if (Gerber.IsGerberRS427X(fullPathName))
             {            

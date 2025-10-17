@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "IsoCnc": {
+      "commandName": "Project",
+      "commandLineArgs": "powerline-logger-F_Cu.gbr top-etch.nc config.ini false  powerline-logger-Edge_Cuts.gbr",
+      "workingDirectory": "C:\\Users\\Patrick\\SkyDrive\\electronics\\kicad\\projects\\powerline-logger"
+    }
+  }
+}
